@@ -1,0 +1,1022 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DroneCode Studio - 無人機程式碼生成與模擬工作台</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0f9ff',
+              100: '#e0f2fe',
+              500: '#0ea5e9',
+              600: '#0284c7',
+              700: '#0369a1',
+              900: '#0c4a6e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- Font Awesome Icons CDN -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <!-- Custom Scrollbar & Canvas Styles -->
+  <style>
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #0f172a;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+    
+    .code-comment { color: #64748b; font-style: italic; }
+    .code-keyword { color: #38bdf8; font-weight: 600; }
+    .code-func { color: #facc15; }
+    .code-num { color: #f43f5e; }
+    .code-str { color: #4ade80; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col antialiased selection:bg-sky-500 selection:text-white">
+
+  <!-- Top Navigation Header -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="p-2 bg-sky-500/10 border border-sky-500/30 rounded-xl text-sky-400">
+          <i class="fa-solid fa-drone-front text-xl"></i>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg leading-tight tracking-wide flex items-center gap-2">
+            DroneCode Studio
+            <span class="text-xs bg-sky-500/20 text-sky-300 border border-sky-500/30 px-2 py-0.5 rounded-full font-mono">v1.2</span>
+          </h1>
+          <p class="text-xs text-slate-400">無人機 Python 指令生成與軌跡模擬控制台</p>
+        </div>
+      </div>
+
+      <!-- Quick Action Controls -->
+      <div class="flex items-center gap-3">
+        <div class="hidden sm:flex items-center bg-slate-800 rounded-lg p-1 border border-slate-700 text-xs">
+          <span class="px-2 text-slate-400">SDK:</span>
+          <select id="sdkSelect" class="bg-transparent font-medium text-sky-400 focus:outline-none cursor-pointer pr-2">
+            <option value="djitellopy">DJI Tello (djitellopy + OpenCV)</option>
+            <option value="dronekit" disabled>DroneKit APM (開發中)</option>
+          </select>
+        </div>
+        
+        <button onclick="loadTemplate('square')" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+          <i class="fa-solid fa-draw-polygon text-sky-400"></i> 正方形巡航
+        </button>
+        <button onclick="loadTemplate('spiral')" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+          <i class="fa-solid fa-arrows-spin text-amber-400"></i> 螺旋上升
+        </button>
+        <button onclick="loadTemplate('face_track')" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+          <i class="fa-solid fa-user-gear text-purple-400"></i> 人臉追蹤
+        </button>
+        <button onclick="loadTemplate('ring_pass')" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+          <i class="fa-solid fa-circle-dot text-rose-400"></i> 視覺穿環
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Grid Workspace -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 grid grid-cols-1 lg:grid-cols-12 gap-5">
+
+    <!-- LEFT COLUMN: Command Builder & Input (4 cols) -->
+    <section class="lg:col-span-4 flex flex-col gap-4">
+      
+      <!-- Natural Language Text Parser Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
+        <div class="flex justify-between items-center mb-2">
+          <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+            <i class="fa-solid fa-wand-magic-sparkles text-sky-400"></i> 自然語言快速解析
+          </h2>
+        </div>
+        <textarea id="promptInput" rows="3" 
+          placeholder="例如：起飛後，上升 60 公分，向前 120 公分，順時針轉 90 度，最後降落。"
+          class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition resize-none"></textarea>
+        <button onclick="parseNaturalText()" 
+          class="mt-2 w-full bg-sky-600 hover:bg-sky-500 text-white font-medium text-xs py-2 rounded-lg transition flex items-center justify-center gap-1.5 shadow-lg shadow-sky-600/20">
+          <i class="fa-solid fa-bolt"></i> 解析並加入動作序列
+        </button>
+      </div>
+
+      <!-- Action Palette (Add New Command) -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl flex-1 flex flex-col">
+        <h2 class="text-sm font-semibold text-slate-200 mb-3 flex items-center gap-2">
+          <i class="fa-solid fa-list-check text-sky-400"></i> 動作流程建構器
+        </h2>
+
+        <!-- Action Creator Controls -->
+        <div class="bg-slate-950 p-3 rounded-lg border border-slate-800/80 mb-3 space-y-2">
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <label class="block text-slate-400 mb-1">選擇動作</label>
+              <select id="actionTypeSelect" onchange="updateActionInputFields()" class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-slate-200 focus:outline-none focus:border-sky-500">
+                <optgroup label="基礎飛行指令">
+                  <option value="takeoff">🚁 起飛 (Takeoff)</option>
+                  <option value="land">🛬 降落 (Land)</option>
+                  <option value="up">⬆️ 向上升 (Up)</option>
+                  <option value="down">⬇️ 向下降 (Down)</option>
+                  <option value="forward">⬆️ 向前飛 (Forward)</option>
+                  <option value="back">⬇️ 向後飛 (Backward)</option>
+                  <option value="left">⬅️ 向左平移 (Left)</option>
+                  <option value="right">➡️ 向右平移 (Right)</option>
+                  <option value="rotate_cw">🔄 順時針轉 (CW)</option>
+                  <option value="rotate_ccw">↩️ 逆時針轉 (CCW)</option>
+                  <option value="flip">🔄 360翻滾 (Flip)</option>
+                  <option value="hover">⏳ 懸停等待 (Hover)</option>
+                </optgroup>
+                <optgroup label="📷 視覺辨識與感測 (OpenCV)">
+                  <option value="track_face">👤 人臉辨識追蹤 (Face Track)</option>
+                  <option value="ring_pass">⭕ 視覺環形穿過 (Ring Pass)</option>
+                  <option value="color_track">🎨 顏色目標追蹤 (Color Track)</option>
+                  <option value="aruco_align">🏷️ ArUco 標籤對準 (ArUco Align)</option>
+                </optgroup>
+              </select>
+            </div>
+            
+            <div id="actionValueContainer">
+              <label id="actionValueLabel" class="block text-slate-400 mb-1">數值 (cm)</label>
+              <input type="number" id="actionValueInput" value="50" min="10" max="500" class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-slate-200 focus:outline-none focus:border-sky-500">
+              <select id="actionValueSelect" class="w-full bg-slate-900 border border-slate-700 rounded p-1.5 text-slate-200 focus:outline-none focus:border-sky-500 hidden">
+                <option value="red">紅色 (Red)</option>
+                <option value="green">綠色 (Green)</option>
+                <option value="blue">藍色 (Blue)</option>
+                <option value="yellow">黃色 (Yellow)</option>
+              </select>
+            </div>
+          </div>
+
+          <button onclick="addSelectedAction()" class="w-full bg-slate-800 hover:bg-slate-700 text-sky-400 font-medium text-xs py-1.5 rounded border border-slate-700 transition flex items-center justify-center gap-1">
+            <i class="fa-solid fa-plus"></i> 新增至流程列表
+          </button>
+        </div>
+
+        <!-- Action Sequence Item List -->
+        <div class="flex-1 overflow-y-auto max-h-[300px] pr-1 space-y-1.5" id="actionSequenceList">
+          <!-- Dynamic sequence items inserted here -->
+        </div>
+
+        <div class="pt-3 border-t border-slate-800 flex justify-between items-center mt-auto">
+          <span class="text-xs text-slate-400" id="totalStepCount">共 0 個步驟</span>
+          <button onclick="clearAllActions()" class="text-xs text-rose-400 hover:text-rose-300 transition">
+            <i class="fa-solid fa-trash-can"></i> 清空全部
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- MIDDLE COLUMN: Visual Flight Trajectory Simulator (4 cols) -->
+    <section class="lg:col-span-4 flex flex-col gap-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl flex-1 flex flex-col">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+            <i class="fa-solid fa-compass-drafting text-sky-400"></i> 飛行軌跡模擬器 (2D Canvas)
+          </h2>
+          <div class="flex gap-1.5">
+            <button onclick="startSimulation()" class="bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-500/30 text-xs px-2.5 py-1 rounded transition flex items-center gap-1">
+              <i class="fa-solid fa-play"></i> 播放
+            </button>
+            <button onclick="resetSimulation()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-2.5 py-1 rounded border border-slate-700 transition">
+              <i class="fa-solid fa-rotate-left"></i> 重置
+            </button>
+          </div>
+        </div>
+
+        <!-- Canvas Frame -->
+        <div class="relative w-full aspect-square bg-slate-950 border border-slate-800 rounded-lg overflow-hidden flex items-center justify-center">
+          <canvas id="droneCanvas" width="400" height="400" class="w-full h-full block"></canvas>
+          
+          <!-- Canvas Overlay Controls / Legend -->
+          <div class="absolute top-2 left-2 bg-slate-900/80 backdrop-blur px-2 py-1 rounded border border-slate-800 text-[10px] text-slate-400 space-y-0.5 z-10">
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-500"></span> 起飛點 (0,0)
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-sky-400"></span> 飛行軌跡
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-purple-400"></span> 視覺目標 (人臉/標籤/環)
+            </div>
+          </div>
+
+          <div id="simStatusBadge" class="absolute bottom-2 right-2 bg-slate-900/90 text-sky-400 border border-sky-500/30 text-[10px] font-mono px-2 py-0.5 rounded">
+            狀態: 待命 (Ready)
+          </div>
+        </div>
+
+        <!-- Telemetry Info Grid -->
+        <div class="grid grid-cols-3 gap-2 mt-3 text-center text-xs">
+          <div class="bg-slate-950 p-2 rounded border border-slate-800">
+            <div class="text-slate-500 text-[10px]">估算高度</div>
+            <div class="font-mono text-sky-400 font-semibold" id="telemetryAlt">0 cm</div>
+          </div>
+          <div class="bg-slate-950 p-2 rounded border border-slate-800">
+            <div class="text-slate-500 text-[10px]">平面距離</div>
+            <div class="font-mono text-sky-400 font-semibold" id="telemetryDist">0 cm</div>
+          </div>
+          <div class="bg-slate-950 p-2 rounded border border-slate-800">
+            <div class="text-slate-500 text-[10px]">航向角度</div>
+            <div class="font-mono text-amber-400 font-semibold" id="telemetryYaw">0°</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT COLUMN: Real-time Code Output & Explanations (4 cols) -->
+    <section class="lg:col-span-4 flex flex-col gap-4">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl flex-1 flex flex-col">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+            <i class="fa-brands fa-python text-amber-400"></i> Python 程式碼 (含逐行註解)
+          </h2>
+          <div class="flex gap-1.5">
+            <button onclick="copyGeneratedCode()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-1 rounded border border-slate-700 transition flex items-center gap-1">
+              <i class="fa-regular fa-copy"></i> 複製
+            </button>
+            <button onclick="downloadCodeFile()" class="bg-sky-600 hover:bg-sky-500 text-white text-xs px-2.5 py-1 rounded transition flex items-center gap-1 shadow">
+              <i class="fa-solid fa-download"></i> 匯出 .py
+            </button>
+          </div>
+        </div>
+
+        <!-- Code Display Block with Custom Styling -->
+        <div class="relative flex-1 bg-slate-950 border border-slate-800 rounded-lg overflow-hidden flex flex-col">
+          <div class="bg-slate-900/60 px-3 py-1.5 border-b border-slate-800 text-[11px] font-mono text-slate-400 flex justify-between">
+            <span>tello_mission.py</span>
+            <span>UTF-8</span>
+          </div>
+          <pre id="codeOutput" class="flex-1 p-3 font-mono text-xs overflow-auto leading-relaxed select-text text-slate-300">
+            <!-- Dynamic Python Code Generated Here -->
+          </pre>
+        </div>
+
+        <!-- Safety Notice Banner -->
+        <div class="mt-3 bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-lg text-[11px] text-amber-300 flex items-start gap-2">
+          <i class="fa-solid fa-triangle-exclamation text-amber-400 mt-0.5"></i>
+          <span><b>安全提醒：</b>實際飛行前請確認環境開闊，室內操作請裝上防護罩，並隨時準備手動接管無人機。</span>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Toast Notification Container -->
+  <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-slate-100 border border-slate-700 px-4 py-2.5 rounded-xl shadow-2xl transition-all opacity-0 translate-y-4 pointer-events-none flex items-center gap-2 text-xs z-50">
+    <i id="toastIcon" class="fa-solid fa-circle-check text-emerald-400"></i>
+    <span id="toastMsg">操作成功</span>
+  </div>
+
+  <script>
+    // --- Application State ---
+    let actionSequence = [
+      { id: 1, type: 'takeoff', val: null },
+      { id: 2, type: 'up', val: 50 },
+      { id: 3, type: 'track_face', val: 10 },
+      { id: 4, type: 'ring_pass', val: 'red' },
+      { id: 5, type: 'land', val: null }
+    ];
+
+    let nextId = 6;
+    let simAnimationId = null;
+
+    // Canvas State
+    let canvas, ctx;
+    let droneSim = { x: 200, y: 320, angle: -90, altitude: 0, path: [] };
+
+    // --- On Load Initialization ---
+    window.onload = function() {
+      canvas = document.getElementById('droneCanvas');
+      ctx = canvas.getContext('2d');
+      
+      updateActionInputFields();
+      renderActionList();
+      generatePythonCode();
+      resetSimulation();
+    };
+
+    // --- UI Helper Functions ---
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toastMsg');
+      const toastIcon = document.getElementById('toastIcon');
+
+      toastMsg.textContent = message;
+      if (type === 'success') {
+        toastIcon.className = "fa-solid fa-circle-check text-emerald-400";
+      } else if (type === 'error') {
+        toastIcon.className = "fa-solid fa-circle-xmark text-rose-400";
+      } else {
+        toastIcon.className = "fa-solid fa-circle-info text-sky-400";
+      }
+
+      toast.classList.remove('opacity-0', 'translate-y-4');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', 'translate-y-4');
+      }, 2500);
+    }
+
+    function updateActionInputFields() {
+      const type = document.getElementById('actionTypeSelect').value;
+      const container = document.getElementById('actionValueContainer');
+      const label = document.getElementById('actionValueLabel');
+      const input = document.getElementById('actionValueInput');
+      const dropdown = document.getElementById('actionValueSelect');
+
+      input.classList.remove('hidden');
+      dropdown.classList.add('hidden');
+
+      if (type === 'takeoff' || type === 'land') {
+        container.style.display = 'none';
+      } else {
+        container.style.display = 'block';
+        if (type.startsWith('rotate')) {
+          label.textContent = "角度 (度 °)";
+          input.value = "90";
+          input.min = "1";
+          input.max = "360";
+        } else if (type === 'hover') {
+          label.textContent = "時間 (秒)";
+          input.value = "2";
+          input.min = "1";
+          input.max = "10";
+        } else if (type === 'track_face') {
+          label.textContent = "追蹤持續時間 (秒)";
+          input.value = "10";
+          input.min = "3";
+          input.max = "60";
+        } else if (type === 'ring_pass' || type === 'color_track') {
+          label.textContent = "標靶/目標顏色";
+          input.classList.add('hidden');
+          dropdown.classList.remove('hidden');
+        } else if (type === 'aruco_align') {
+          label.textContent = "ArUco 標籤 ID";
+          input.value = "0";
+          input.min = "0";
+          input.max = "50";
+        } else if (type === 'flip') {
+          label.textContent = "方向 (f/b/l/r)";
+          input.value = "f";
+        } else {
+          label.textContent = "距離 (cm)";
+          input.value = "50";
+          input.min = "20";
+          input.max = "500";
+        }
+      }
+    }
+
+    // --- Action List Management ---
+    function addSelectedAction() {
+      const typeSelect = document.getElementById('actionTypeSelect');
+      const type = typeSelect.value;
+      const valInput = document.getElementById('actionValueInput');
+      const valDropdown = document.getElementById('actionValueSelect');
+      let val = null;
+
+      if (type !== 'takeoff' && type !== 'land') {
+        if (type === 'ring_pass' || type === 'color_track') {
+          val = valDropdown.value;
+        } else if (type === 'flip') {
+          val = valInput.value;
+        } else {
+          val = parseInt(valInput.value) || 50;
+        }
+      }
+
+      actionSequence.push({ id: nextId++, type, val });
+      renderActionList();
+      generatePythonCode();
+      resetSimulation();
+      showToast('已成功新增視覺/飛行動作步驟');
+    }
+
+    function removeAction(id) {
+      actionSequence = actionSequence.filter(act => act.id !== id);
+      renderActionList();
+      generatePythonCode();
+      resetSimulation();
+    }
+
+    function moveActionUp(index) {
+      if (index <= 0) return;
+      const temp = actionSequence[index];
+      actionSequence[index] = actionSequence[index - 1];
+      actionSequence[index - 1] = temp;
+      renderActionList();
+      generatePythonCode();
+      resetSimulation();
+    }
+
+    function moveActionDown(index) {
+      if (index >= actionSequence.length - 1) return;
+      const temp = actionSequence[index];
+      actionSequence[index] = actionSequence[index + 1];
+      actionSequence[index + 1] = temp;
+      renderActionList();
+      generatePythonCode();
+      resetSimulation();
+    }
+
+    function clearAllActions() {
+      actionSequence = [];
+      renderActionList();
+      generatePythonCode();
+      resetSimulation();
+      showToast('已清空流程列表', 'info');
+    }
+
+    function getActionLabel(act) {
+      switch(act.type) {
+        case 'takeoff': return { icon: 'fa-plane-departure', text: '起飛升空', unit: '' };
+        case 'land': return { icon: 'fa-plane-arrival', text: '安全降落', unit: '' };
+        case 'up': return { icon: 'fa-arrow-up', text: '上升', unit: 'cm' };
+        case 'down': return { icon: 'fa-arrow-down', text: '下降', unit: 'cm' };
+        case 'forward': return { icon: 'fa-arrow-up-long', text: '向前', unit: 'cm' };
+        case 'back': return { icon: 'fa-arrow-down-long', text: '向後', unit: 'cm' };
+        case 'left': return { icon: 'fa-arrow-left', text: '向左', unit: 'cm' };
+        case 'right': return { icon: 'fa-arrow-right', text: '向右', unit: 'cm' };
+        case 'rotate_cw': return { icon: 'fa-rotate-right', text: '順時針轉', unit: '°' };
+        case 'rotate_ccw': return { icon: 'fa-rotate-left', text: '逆時針轉', unit: '°' };
+        case 'flip': return { icon: 'fa-arrows-spin', text: '360° 翻滾', unit: '' };
+        case 'hover': return { icon: 'fa-pause', text: '懸停等待', unit: '秒' };
+        // Vision Sensing Actions
+        case 'track_face': return { icon: 'fa-user-gear text-purple-400', text: '人臉辨識與追蹤', unit: '秒' };
+        case 'ring_pass': return { icon: 'fa-circle-dot text-rose-400', text: '視覺搜尋並穿過圓環', unit: '色' };
+        case 'color_track': return { icon: 'fa-palette text-amber-400', text: '顏色物件追蹤', unit: '色' };
+        case 'aruco_align': return { icon: 'fa-qrcode text-emerald-400', text: 'ArUco 標籤對準', unit: 'ID' };
+        default: return { icon: 'fa-circle', text: act.type, unit: '' };
+      }
+    }
+
+    function renderActionList() {
+      const container = document.getElementById('actionSequenceList');
+      container.innerHTML = '';
+
+      actionSequence.forEach((act, idx) => {
+        const info = getActionLabel(act);
+        const div = document.createElement('div');
+        div.className = "flex items-center justify-between bg-slate-950 p-2 rounded-lg border border-slate-800 hover:border-slate-700 transition text-xs";
+        
+        div.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="w-5 h-5 rounded-full bg-slate-800 text-sky-400 flex items-center justify-center font-mono text-[10px]">${idx + 1}</span>
+            <i class="fa-solid ${info.icon} text-slate-400 w-4 text-center"></i>
+            <span class="text-slate-200 font-medium">${info.text}</span>
+            ${act.val !== null ? `<span class="text-sky-400 font-mono bg-sky-950/60 px-1.5 py-0.5 rounded border border-sky-800/50 text-[10px]">${act.val} ${info.unit}</span>` : ''}
+          </div>
+          <div class="flex items-center gap-1 text-slate-500">
+            <button onclick="moveActionUp(${idx})" class="hover:text-slate-200 p-1"><i class="fa-solid fa-chevron-up"></i></button>
+            <button onclick="moveActionDown(${idx})" class="hover:text-slate-200 p-1"><i class="fa-solid fa-chevron-down"></i></button>
+            <button onclick="removeAction(${act.id})" class="hover:text-rose-400 p-1 ml-1"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+        `;
+        container.appendChild(div);
+      });
+
+      document.getElementById('totalStepCount').textContent = `共 ${actionSequence.length} 個步驟`;
+    }
+
+    // --- Natural Language Parser ---
+    function parseNaturalText() {
+      const text = document.getElementById('promptInput').value.trim();
+      if (!text) {
+        showToast('請先輸入文字陳述！', 'error');
+        return;
+      }
+
+      actionSequence = [];
+      
+      if (text.includes('起飛')) actionSequence.push({ id: nextId++, type: 'takeoff', val: null });
+
+      // Pattern matching
+      const patterns = [
+        { regex: /(?:向上|上升)\s*(\d+)/g, type: 'up' },
+        { regex: /(?:向下|下降)\s*(\d+)/g, type: 'down' },
+        { regex: /(?:向前|前進)\s*(\d+)/g, type: 'forward' },
+        { regex: /(?:向後|後退)\s*(\d+)/g, type: 'back' },
+        { regex: /(?:向左|左平移)\s*(\d+)/g, type: 'left' },
+        { regex: /(?:向右|右平移)\s*(\d+)/g, type: 'right' },
+        { regex: /(?:順時針旋轉|右轉)\s*(\d+)/g, type: 'rotate_cw' },
+        { regex: /(?:逆時針旋轉|左轉)\s*(\d+)/g, type: 'rotate_ccw' },
+        { regex: /(?:等待|懸停|停頓)\s*(\d+)/g, type: 'hover' },
+        { regex: /(?:人臉追蹤|追蹤人臉|辨識人臉)\s*(\d*)/g, type: 'track_face', defaultVal: 10 },
+        { regex: /(?:穿環|環形|穿過圓環)/g, type: 'ring_pass', defaultVal: 'red' },
+        { regex: /(?:顏色追蹤|追蹤物體)/g, type: 'color_track', defaultVal: 'green' },
+        { regex: /(?:標籤|ArUco|qrcode)\s*(\d*)/g, type: 'aruco_align', defaultVal: 0 }
+      ];
+
+      // Sequential extraction
+      let matches = [];
+      patterns.forEach(p => {
+        let match;
+        while ((match = p.regex.exec(text)) !== null) {
+          let val = match[1] ? (isNaN(parseInt(match[1])) ? match[1] : parseInt(match[1])) : (p.defaultVal || 50);
+          matches.push({ index: match.index, type: p.type, val });
+        }
+      });
+
+      // Sort by index in text
+      matches.sort((a, b) => a.index - b.index);
+      matches.forEach(m => {
+        actionSequence.push({ id: nextId++, type: m.type, val: m.val });
+      });
+
+      if (text.includes('降落')) actionSequence.push({ id: nextId++, type: 'land', val: null });
+
+      if (actionSequence.length === 0) {
+        showToast('未檢測到有效動作指令，請嘗試更具體的描述', 'error');
+      } else {
+        renderActionList();
+        generatePythonCode();
+        resetSimulation();
+        showToast('已成功解析文字並生成含視覺感測之步驟！');
+      }
+    }
+
+    function loadTemplate(type) {
+      if (type === 'square') {
+        actionSequence = [
+          { id: nextId++, type: 'takeoff', val: null },
+          { id: nextId++, type: 'up', val: 50 },
+          { id: nextId++, type: 'forward', val: 100 },
+          { id: nextId++, type: 'rotate_cw', val: 90 },
+          { id: nextId++, type: 'forward', val: 100 },
+          { id: nextId++, type: 'rotate_cw', val: 90 },
+          { id: nextId++, type: 'land', val: null }
+        ];
+      } else if (type === 'spiral') {
+        actionSequence = [
+          { id: nextId++, type: 'takeoff', val: null },
+          { id: nextId++, type: 'up', val: 30 },
+          { id: nextId++, type: 'forward', val: 50 },
+          { id: nextId++, type: 'rotate_cw', val: 45 },
+          { id: nextId++, type: 'land', val: null }
+        ];
+      } else if (type === 'face_track') {
+        actionSequence = [
+          { id: nextId++, type: 'takeoff', val: null },
+          { id: nextId++, type: 'up', val: 40 },
+          { id: nextId++, type: 'track_face', val: 15 },
+          { id: nextId++, type: 'land', val: null }
+        ];
+      } else if (type === 'ring_pass') {
+        actionSequence = [
+          { id: nextId++, type: 'takeoff', val: null },
+          { id: nextId++, type: 'forward', val: 80 },
+          { id: nextId++, type: 'ring_pass', val: 'red' },
+          { id: nextId++, type: 'land', val: null }
+        ];
+      }
+      renderActionList();
+      generatePythonCode();
+      resetSimulation();
+      showToast('已載入視覺任務範本');
+    }
+
+    // --- Python Code Generator ---
+    function generatePythonCode() {
+      const container = document.getElementById('codeOutput');
+      let lines = [];
+
+      let hasVision = actionSequence.some(a => ['track_face', 'ring_pass', 'color_track', 'aruco_align'].includes(a.type));
+
+      // Header Imports
+      lines.push('<span class="code-comment"># =========================================================</span>');
+      lines.push('<span class="code-comment"># 🚁 DJI Tello 自動飛行與 OpenCV 視覺感測程式碼</span>');
+      lines.push('<span class="code-comment"># 生成時間: ' + new Date().toLocaleString('zh-TW') + '</span>');
+      lines.push('<span class="code-comment"># =========================================================</span>\n');
+
+      lines.push('<span class="code-comment"># [步驟 1] 匯入 SDK 及影像處理 OpenCV 模組</span>');
+      lines.push('<span class="code-keyword">from</span> djitellopy <span class="code-keyword">import</span> Tello');
+      lines.push('<span class="code-keyword">import</span> time');
+      if (hasVision) {
+        lines.push('<span class="code-keyword">import</span> cv2');
+        lines.push('<span class="code-keyword">import</span> numpy <span class="code-keyword">as</span> np');
+      }
+      lines.push('');
+
+      lines.push('<span class="code-comment"># [步驟 2] 初始化 Tello 機身並開啟連線與相機鏡頭</span>');
+      lines.push('drone = <span class="code-func">Tello</span>()');
+      lines.push('drone.<span class="code-func">connect</span>()');
+      if (hasVision) {
+        lines.push('drone.<span class="code-func">streamon</span>() <span class="code-comment"># 開啟前方鏡頭視訊串流</span>');
+        lines.push('frame_reader = drone.<span class="code-func">get_frame_read</span>()\n');
+      }
+
+      lines.push('<span class="code-comment"># [步驟 3] 電量檢查</span>');
+      lines.push('<span class="code-func">print</span>(<span class="code-str">f"當前電量: {drone.get_battery()}%"</span>)\n');
+
+      lines.push('<span class="code-comment"># [步驟 4] 飛行任務與視覺邏輯序列</span>');
+
+      actionSequence.forEach((act, i) => {
+        const stepNum = i + 5;
+        switch(act.type) {
+          case 'takeoff':
+            lines.push(`<span class="code-comment"># [步驟 ${stepNum}] 執行起飛升空</span>`);
+            lines.push(`drone.<span class="code-func">takeoff</span>()`);
+            lines.push(`time.<span class="code-func">sleep</span>(<span class="code-num">2</span>)\n`);
+            break;
+          case 'land':
+            lines.push(`<span class="code-comment"># [步驟 ${stepNum}] 安全降落</span>`);
+            lines.push(`drone.<span class="code-func">land</span>()\n`);
+            break;
+          case 'up':
+            lines.push(`drone.<span class="code-func">move_up</span>(<span class="code-num">${act.val}</span>)\n`);
+            break;
+          case 'down':
+            lines.push(`drone.<span class="code-func">move_down</span>(<span class="code-num">${act.val}</span>)\n`);
+            break;
+          case 'forward':
+            lines.push(`drone.<span class="code-func">move_forward</span>(<span class="code-num">${act.val}</span>)\n`);
+            break;
+          case 'back':
+            lines.push(`drone.<span class="code-func">move_back</span>(<span class="code-num">${act.val}</span>)\n`);
+            break;
+          case 'left':
+            lines.push(`drone.<span class="code-func">move_left</span>(<span class="code-num">${act.val}</span>)\n`);
+            break;
+          case 'right':
+            lines.push(`drone.<span class="code-func">move_right</span>(<span class="code-num">${act.val}</span>)\n`);
+            break;
+          case 'rotate_cw':
+            lines.push(`drone.<span class="code-func">rotate_clockwise</span>(<span class="code-num">${act.val}</span>)\n`);
+            break;
+          case 'rotate_ccw':
+            lines.push(`drone.<span class="code-func">rotate_counter_clockwise</span>(<span class="code-num">${act.val}</span>)\n`);
+            break;
+          case 'hover':
+            lines.push(`time.<span class="code-func">sleep</span>(<span class="code-num">${act.val}</span>)\n`);
+            break;
+            
+          // --- Vision Code Snippets ---
+          case 'track_face':
+            lines.push(`<span class="code-comment"># [步驟 ${stepNum}] 👁️ 啟動人臉辨識與 PID 姿勢對準追蹤 (${act.val} 秒)</span>`);
+            lines.push(`face_cascade = cv2.<span class="code-func">CascadeClassifier</span>(cv2.data.haarcascades + <span class="code-str">'haarcascade_frontalface_default.xml'</span>)`);
+            lines.push(`start_time = time.<span class="code-func">time</span>()`);
+            lines.push(`<span class="code-keyword">while</span> time.<span class="code-func">time</span>() - start_time < <span class="code-num">${act.val}</span>:`);
+            lines.push(`    img = frame_reader.frame`);
+            lines.push(`    gray = cv2.<span class="code-func">cvtColor</span>(img, cv2.COLOR_BGR2GRAY)`);
+            lines.push(`    faces = face_cascade.<span class="code-func">detectMultiScale</span>(gray, <span class="code-num">1.2</span>, <span class="code-num">5</span>)`);
+            lines.push(`    <span class="code-keyword">if</span> <span class="code-func">len</span>(faces) > <span class="code-num">0</span>:`);
+            lines.push(`        (x, y, w, h) = faces[<span class="code-num">0</span>]`);
+            lines.push(`        center_x = x + w // <span class="code-num">2</span>`);
+            lines.push(`        error_x = center_x - <span class="code-num">180</span> <span class="code-comment"># 計算偏離影像中心誤差</span>`);
+            lines.push(`        yaw_speed = <span class="code-func">int</span>(np.<span class="code-func">clip</span>(error_x * <span class="code-num">0.3</span>, -<span class="code-num">50</span>, <span class="code-num">50</span>))`);
+            lines.push(`        drone.<span class="code-func">send_rc_control</span>(<span class="code-num">0</span>, <span class="code-num">0</span>, <span class="code-num">0</span>, yaw_speed) <span class="code-comment"># 偏航轉動對準人臉</span>`);
+            lines.push(`    <span class="code-keyword">else</span>:`);
+            lines.push(`        drone.<span class="code-func">send_rc_control</span>(<span class="code-num">0</span>, <span class="code-num">0</span>, <span class="code-num">0</span>, <span class="code-num">0</span>)`);
+            lines.push(`    cv2.<span class="code-func">imshow</span>(<span class="code-str">"Tello Face Tracking"</span>, img)`);
+            lines.push(`    <span class="code-keyword">if</span> cv2.<span class="code-func">waitKey</span>(<span class="code-num">1</span>) & <span class="code-num">0xFF</span> == <span class="code-func">ord</span>(<span class="code-str">'q'</span>): <span class="code-keyword">break</span>`);
+            lines.push(`drone.<span class="code-func">send_rc_control</span>(<span class="code-num">0</span>, <span class="code-num">0</span>, <span class="code-num">0</span>, <span class="code-num">0</span>)\n`);
+            break;
+
+          case 'ring_pass':
+            lines.push(`<span class="code-comment"># [步驟 ${stepNum}] ⭕ 視覺 HSV 顏色輪廓搜尋 ${act.val} 色飛行環並穿過</span>`);
+            lines.push(`img = frame_reader.frame`);
+            lines.push(`hsv = cv2.<span class="code-func">cvtColor</span>(img, cv2.COLOR_BGR2HSV)`);
+            lines.push(`<span class="code-comment"># 設定 ${act.val} 色 HSV 色彩遮罩區間</span>`);
+            lines.push(`lower_bound = np.<span class="code-func">array</span>([<span class="code-num">0</span>, <span class="code-num">120</span>, <span class="code-num">70</span>]); upper_bound = np.<span class="code-func">array</span>([<span class="code-num">10</span>, <span class="code-num">255</span>, <span class="code-num">255</span>])`);
+            lines.push(`mask = cv2.<span class="code-func">inRange</span>(hsv, lower_bound, upper_bound)`);
+            lines.push(`contours, _ = cv2.<span class="code-func">findContours</span>(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)`);
+            lines.push(`<span class="code-keyword">if</span> contours:`);
+            lines.push(`    largest_contour = <span class="code-func">max</span>(contours, key=cv2.contourArea)`);
+            lines.push(`    ((x, y), radius) = cv2.<span class="code-func">minEnclosingCircle</span>(largest_contour)`);
+            lines.push(`    <span class="code-func">print</span>(<span class="code-str">f"鎖定飛行環中心點: ({x}, {y}), 半徑: {radius}"</span>)`);
+            lines.push(`    <span class="code-comment"># 執行對準並加速穿過動作</span>`);
+            lines.push(`    drone.<span class="code-func">move_forward</span>(<span class="code-num">150</span>)`);
+            lines.push(`\n`);
+            break;
+
+          case 'color_track':
+            lines.push(`<span class="code-comment"># [步驟 ${stepNum}] 🎨 追蹤 ${act.val} 色目標物體</span>`);
+            lines.push(`drone.<span class="code-func">rotate_clockwise</span>(<span class="code-num">360</span>) <span class="code-comment"># 原地 360 度旋轉搜尋目標物</span>\n`);
+            break;
+
+          case 'aruco_align':
+            lines.push(`<span class="code-comment"># [步驟 ${stepNum}] 🏷️ ArUco 標籤 ID:${act.val} 精準姿態對準</span>`);
+            lines.push(`aruco_dict = cv2.aruco.<span class="code-func">getPredefinedDictionary</span>(cv2.aruco.DICT_6X6_250)`);
+            lines.push(`parameters = cv2.aruco.<span class="code-func">DetectorParameters</span>()`);
+            lines.push(`corners, ids, _ = cv2.aruco.<span class="code-func">detectMarkers</span>(frame_reader.frame, aruco_dict, parameters=parameters)`);
+            lines.push(`<span class="code-keyword">if</span> ids <span class="code-keyword">is not None</span> <span class="code-keyword">and</span> <span class="code-num">${act.val}</span> <span class="code-keyword">in</span> ids:`);
+            lines.push(`    <span class="code-func">print</span>(<span class="code-str">"成功辨識到指定 ArUco 標籤，對準完成！"</span>)`);
+            lines.push(`\n`);
+            break;
+        }
+      });
+
+      if (hasVision) {
+        lines.push('<span class="code-comment"># [步驟 結尾] 關閉串流與視窗</span>');
+        lines.push('drone.<span class="code-func">streamoff</span>()');
+        lines.push('cv2.<span class="code-func">destroyAllWindows</span>()');
+      }
+      lines.push('<span class="code-func">print</span>(<span class="code-str">"無人機任務成功執行完畢！"</span>)');
+
+      container.innerHTML = lines.join('\n');
+    }
+
+    // --- 2D Trajectory Simulator Logic ---
+    function updateTelemetry(alt, dist, yaw) {
+      const altEl = document.getElementById('telemetryAlt');
+      const distEl = document.getElementById('telemetryDist');
+      const yawEl = document.getElementById('telemetryYaw');
+      
+      if (altEl) altEl.textContent = `${Math.round(alt)} cm`;
+      if (distEl) distEl.textContent = `${Math.round(dist)} cm`;
+      if (yawEl) {
+        let normYaw = Math.round(((yaw % 360) + 360) % 360);
+        yawEl.textContent = `${normYaw}°`;
+      }
+    }
+
+    function resetSimulation() {
+      if (simAnimationId) cancelAnimationFrame(simAnimationId);
+      
+      droneSim = {
+        x: canvas.width / 2,
+        y: canvas.height / 2 + 100,
+        angle: -90, // Facing UP initially
+        altitude: 0,
+        path: [{ x: canvas.width / 2, y: canvas.height / 2 + 100, alt: 0 }]
+      };
+
+      document.getElementById('simStatusBadge').textContent = "狀態: 待命 (Ready)";
+      document.getElementById('simStatusBadge').className = "absolute bottom-2 right-2 bg-slate-900/90 text-sky-400 border border-sky-500/30 text-[10px] font-mono px-2 py-0.5 rounded";
+      
+      updateTelemetry(0, 0, 0);
+      drawCanvas();
+    }
+
+    function drawCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Background Grid
+      ctx.strokeStyle = '#1e293b';
+      ctx.lineWidth = 1;
+      const gridSize = 20;
+      for (let x = 0; x < canvas.width; x += gridSize) {
+        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += gridSize) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      }
+
+      // Render Visual Sensing Targets on Canvas
+      actionSequence.forEach((act) => {
+        if (act.type === 'ring_pass') {
+          // Render Ring Target Gate
+          ctx.strokeStyle = '#f43f5e';
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.arc(200, 160, 22, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(244, 63, 94, 0.2)';
+          ctx.fill();
+          ctx.fillStyle = '#fda4af';
+          ctx.font = '10px monospace';
+          ctx.fillText("⭕ 穿環目標", 170, 125);
+        } else if (act.type === 'track_face') {
+          // Render Human Target Icon
+          ctx.fillStyle = '#c084fc';
+          ctx.beginPath();
+          ctx.arc(200, 220, 10, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.font = '10px monospace';
+          ctx.fillText("👤 人臉辨識點", 168, 202);
+        } else if (act.type === 'aruco_align') {
+          // Render ArUco Marker Box
+          ctx.fillStyle = '#10b981';
+          ctx.fillRect(280, 180, 20, 20);
+          ctx.strokeStyle = '#34d399';
+          ctx.strokeRect(280, 180, 20, 20);
+          ctx.font = '10px monospace';
+          ctx.fillText("🏷️ ArUco", 270, 170);
+        }
+      });
+
+      // Draw Trajectory Path Line
+      if (droneSim.path.length > 1) {
+        ctx.beginPath();
+        ctx.strokeStyle = '#0ea5e9';
+        ctx.lineWidth = 2.5;
+        ctx.setLineDash([4, 2]);
+        ctx.moveTo(droneSim.path[0].x, droneSim.path[0].y);
+        for (let i = 1; i < droneSim.path.length; i++) {
+          ctx.lineTo(droneSim.path[i].x, droneSim.path[i].y);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+
+      // Draw Start Point
+      const start = droneSim.path[0];
+      if (start) {
+        ctx.fillStyle = '#10b981';
+        ctx.beginPath(); ctx.arc(start.x, start.y, 5, 0, Math.PI * 2); ctx.fill();
+      }
+
+      // Draw Drone Icon at Current Pos
+      ctx.save();
+      ctx.translate(droneSim.x, droneSim.y);
+      ctx.rotate((droneSim.angle * Math.PI) / 180);
+
+      // Scale based on altitude
+      const altScale = 1 + (droneSim.altitude / 300);
+      ctx.scale(altScale, altScale);
+
+      // Vision Camera Cone Beam Animation
+      ctx.fillStyle = 'rgba(56, 189, 248, 0.15)';
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(40, -25);
+      ctx.lineTo(40, 25);
+      ctx.closePath();
+      ctx.fill();
+
+      // Drone Wings
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-10, -10); ctx.lineTo(10, 10);
+      ctx.moveTo(10, -10); ctx.lineTo(-10, 10);
+      ctx.stroke();
+
+      // Rotors
+      ctx.fillStyle = '#0284c7';
+      [-10, 10].forEach(rx => {
+        [-10, 10].forEach(ry => {
+          ctx.beginPath(); ctx.arc(rx, ry, 4, 0, Math.PI * 2); ctx.fill();
+        });
+      });
+
+      // Front Camera Nose Dot
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath(); ctx.arc(12, 0, 3, 0, Math.PI * 2); ctx.fill();
+
+      ctx.restore();
+    }
+
+    // Animation Play Control
+    function startSimulation() {
+      if (actionSequence.length === 0) return;
+      resetSimulation();
+
+      document.getElementById('simStatusBadge').textContent = "狀態: 視覺感測模擬中";
+      document.getElementById('simStatusBadge').className = "absolute bottom-2 right-2 bg-amber-950/90 text-amber-400 border border-amber-500/30 text-[10px] font-mono px-2 py-0.5 rounded";
+
+      let currentStepIdx = 0;
+      let stepProgress = 0;
+      const speedScale = 0.04;
+
+      let curX = droneSim.x;
+      let curY = droneSim.y;
+      let curAngle = droneSim.angle;
+      let curAlt = droneSim.altitude;
+
+      let startX = curX, startY = curY, startAngle = curAngle, startAlt = curAlt;
+      let targetX = curX, targetY = curY, targetAngle = curAngle, targetAlt = curAlt;
+
+      function setupNextStep() {
+        if (currentStepIdx >= actionSequence.length) {
+          document.getElementById('simStatusBadge').textContent = "狀態: 任務完成";
+          document.getElementById('simStatusBadge').className = "absolute bottom-2 right-2 bg-emerald-950/90 text-emerald-400 border border-emerald-500/30 text-[10px] font-mono px-2 py-0.5 rounded";
+          return false;
+        }
+
+        const act = actionSequence[currentStepIdx];
+        startX = curX; startY = curY; startAngle = curAngle; startAlt = curAlt;
+        targetX = curX; targetY = curY; targetAngle = curAngle; targetAlt = curAlt;
+
+        const rad = (curAngle * Math.PI) / 180;
+        const distPx = (act.val || 50) * 0.6;
+
+        switch(act.type) {
+          case 'takeoff': targetAlt = 80; break;
+          case 'land': targetAlt = 0; break;
+          case 'up': targetAlt += (act.val || 50); break;
+          case 'down': targetAlt = Math.max(0, targetAlt - (act.val || 50)); break;
+          case 'forward':
+            targetX += Math.cos(rad) * distPx;
+            targetY += Math.sin(rad) * distPx;
+            break;
+          case 'back':
+            targetX -= Math.cos(rad) * distPx;
+            targetY -= Math.sin(rad) * distPx;
+            break;
+          case 'rotate_cw': targetAngle += (act.val || 90); break;
+          case 'rotate_ccw': targetAngle -= (act.val || 90); break;
+
+          // Simulation of Vision steps
+          case 'track_face':
+            targetX = 200; targetY = 250;
+            break;
+          case 'ring_pass':
+            targetX = 200; targetY = 130;
+            break;
+          case 'aruco_align':
+            targetX = 270; targetY = 200;
+            break;
+        }
+
+        stepProgress = 0;
+        return true;
+      }
+
+      setupNextStep();
+
+      function animateLoop() {
+        stepProgress += speedScale;
+
+        if (stepProgress >= 1) {
+          stepProgress = 1;
+          curX = targetX; curY = targetY; curAngle = targetAngle; curAlt = targetAlt;
+          
+          droneSim.path.push({ x: curX, y: curY, alt: curAlt });
+          currentStepIdx++;
+
+          if (!setupNextStep()) {
+            drawCanvas();
+            return;
+          }
+        } else {
+          curX = startX + (targetX - startX) * stepProgress;
+          curY = startY + (targetY - startY) * stepProgress;
+          curAngle = startAngle + (targetAngle - startAngle) * stepProgress;
+          curAlt = startAlt + (targetAlt - startAlt) * stepProgress;
+        }
+
+        droneSim.x = curX;
+        droneSim.y = curY;
+        droneSim.angle = curAngle;
+        droneSim.altitude = curAlt;
+
+        const distFromStart = Math.hypot(curX - droneSim.path[0].x, curY - droneSim.path[0].y) / 0.6;
+        updateTelemetry(curAlt, distFromStart, curAngle);
+
+        drawCanvas();
+        simAnimationId = requestAnimationFrame(animateLoop);
+      }
+
+      animateLoop();
+    }
+
+    // --- Export Utilities ---
+    function copyGeneratedCode() {
+      const codeText = document.getElementById('codeOutput').innerText;
+      
+      // Fallback for document.execCommand('copy')
+      const textArea = document.createElement("textarea");
+      textArea.value = codeText;
+      document.body.appendChild(textArea);
+      textArea.select();
+      
+      try {
+        document.execCommand('copy');
+        showToast('程式碼已成功複製至剪貼簿！');
+      } catch (err) {
+        showToast('複製失敗，請手動選取複製', 'error');
+      }
+      document.body.removeChild(textArea);
+    }
+
+    function downloadCodeFile() {
+      const codeText = document.getElementById('codeOutput').innerText;
+      const blob = new Blob([codeText], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "tello_mission.py";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast('已開始下載 tello_mission.py 檔案');
+    }
+  </script>
+</body>
+</html>
